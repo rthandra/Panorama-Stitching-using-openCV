@@ -1,0 +1,91 @@
+import cv2
+print("OpenCV version:", cv2.__version__)
+
+import cv2
+from matplotlib import pyplot as plt
+
+# Load the two images (replace with your image paths)
+image1 = cv2.imread('image1.png')
+image2 = cv2.imread('image2.png')
+
+
+# Convert both images to grayscale
+gray_image1 = cv2.cvtColor(image1, cv2.COLOR_BGR2GRAY)
+gray_image2 = cv2.cvtColor(image2, cv2.COLOR_BGR2GRAY)
+
+# Initialize SIFT detector
+sift = cv2.SIFT_create()
+
+# Find keypoints and descriptors for both images
+keypoints1, descriptors1 = sift.detectAndCompute(gray_image1, None)
+keypoints2, descriptors2 = sift.detectAndCompute(gray_image2, None)
+
+# Draw keypoints on images
+image1_with_keypoints = cv2.drawKeypoints(gray_image1, keypoints1, None, flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+image2_with_keypoints = cv2.drawKeypoints(gray_image2, keypoints2, None, flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+
+#Display the images with keypoints
+plt.figure(figsize=(12,6))
+
+plt.subplot(1, 2, 1)
+plt.imshow(image1_with_keypoints, cmap='gray')  # Use 'gray' colormap for grayscale display
+plt.title("Image 1 with SIFT Keypoints")
+plt.axis('off')
+
+plt.subplot(1, 2, 2)
+plt.imshow(image2_with_keypoints, cmap='gray')  # Use 'gray' colormap for grayscale display
+plt.title("Image 2 with SIFT Keypoints")
+plt.axis('off')
+
+plt.show()
+
+# Initialize SIFT detector with nfeatures=2000
+sift = cv2.SIFT_create(nfeatures=2000)
+
+# Initialize the BFMatcher (Brute Force Matcher)
+bf = cv2.BFMatcher(cv2.NORM_L2, crossCheck=True)
+
+# Match the descriptors
+matches = bf.match(descriptors1, descriptors2)
+
+# Sort matches based on distance
+matches = sorted(matches, key = lambda x:x.distance)
+
+# Draw top matches
+image_matches = cv2.drawMatches(gray_image1, keypoints1, gray_image2, keypoints2, matches[:50], None, flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
+
+plt.figure(figsize=(15,10))
+plt.imshow(image_matches, cmap='gray')
+plt.axis('off')
+plt.show()
+
+import numpy as np
+
+#Extract the matched keypoints' coordinates for RANSAC
+if len(matches) > 4:
+    # Start points (keypoints from Image 1)
+    source_points = np.float32([keypoints1[match.queryIdx].pt for match in matches]).reshape(-1, 1, 2)
+
+    # Destination points (keypoints from Image 2)
+    destination_points = np.float32([keypoints2[match.trainIdx].pt for match in matches]).reshape(-1, 1, 2)
+
+    # Estimate homography matrix using RANSAC
+    homography_matrix, inliers_mask = cv2.findHomography(source_points, destination_points, cv2.RANSAC, 5.0)
+
+    # Warp Image 1 to align with Image 2 using the homography matrix
+    img2_height, img2_width = gray_image2.shape  # Dimensions of second image
+    warped_image1 = cv2.warpPerspective(image1, homography_matrix, (img2_width + image1.shape[1], img2_height))
+
+    # Place Image 2 into the stitched output
+    stitched_output = warped_image1.copy()
+    stitched_output[0:img2_height, 0:img2_width] = image2
+
+    # Display the stitched panorama
+    plt.figure(figsize=(15,10))
+    plt.imshow(cv2.cvtColor(stitched_output, cv2.COLOR_BGR2RGB))
+    plt.title("Stitched Panorama")
+    plt.axis('off')
+    plt.show()
+
+else:
+    print("Not enough matches")
